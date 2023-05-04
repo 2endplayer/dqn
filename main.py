@@ -1,17 +1,8 @@
-import numpy as np
-import gym
-from gym import spaces
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from gym.envs.registration import register
-
-# --------------------------------------------------------------------------------------------------------------------
-# --------------------------------------------------------------------------------------------------------------------
-
 # AGENT
 
+import gym
 import torch
+import os
 import torch.nn as nn
 import torch.optim as optim
 import random
@@ -59,6 +50,7 @@ class DQNAgent:
         with torch.no_grad():
             action_values = self.model(state_tensor)
         self.model.train()
+
         return np.argmax(action_values.numpy())
 
     def replay(self, batch_size):
@@ -104,11 +96,54 @@ class DQNAgent:
 
 
 # ENVIRONMENT
-from gym_examples.my_env_module import Godzilla
+gym.envs.register(
+id='Godzilla-v0',
+entry_point='my_env_module:Godzilla'
+)
 
-env = gym.make('my_env_module.py:Godzilla')
+env = gym.make('Godzilla-v0')
+
 
 # create the agent
 state_size = env.observation_space.shape[0]
 action_size = env.action_space.n
 agent = DQNAgent(state_size, action_size)
+batch_size = 32
+n_episodes = 1000
+
+output_dir = 'model/cartpole'
+
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+
+# --------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------------------------
+done = False
+
+for e in range(n_episodes):
+    state = env.reset()
+    state = np.reshape(state, [1, state_size])
+
+    for time in range(5000):
+        action = agent.act(state)
+
+        next_state, reward, done, _ = env.step(action)
+        reward = reward if not done else -10
+
+        next_state = np.reshape(next_state, [1,state_size])
+
+        agent.remember(state, action, reward, next_state, done)
+
+        state = next_state
+
+        if done:
+            print('episode: {}/{}, score: {}, e: {:.2}'.format(e, n_episodes, time, agent.epsilon))
+            break
+
+        if len(agent.memory) > batch_size:
+            agent.replay(batch_size)
+
+    if e % 50 == 0:
+        agent.save(output_dir + 'weights_' + '{:04d}'.format(e) + 'hdf5')
+
+
